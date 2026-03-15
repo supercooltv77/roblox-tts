@@ -1,27 +1,25 @@
 // server.js — Node.js middleman server
-// Uses OpenAI TTS instead of ElevenLabs
+// Uses Microsoft Edge TTS (completely free, no API key needed)
 
 const express = require("express");
-const fetch = require("node-fetch");
 const app = express();
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// OpenAI TTS voices mapped to friendly names
+// Edge TTS voice map
 const VOICE_MAP = {
-	"adam"   : "onyx",    // Male
-	"bella"  : "nova",    // Female
-	"antoni" : "echo",    // Male
-	"elli"   : "shimmer", // Female
-	"glitch" : "fable",   // Robot-ish
-	"callum" : "alloy",   // Accent
-	"clyde"  : "onyx",    // Funny (reuse onyx with different text)
+	"adam"   : "en-US-GuyNeural",        // Male
+	"bella"  : "en-US-JennyNeural",      // Female
+	"antoni" : "en-US-DavisNeural",      // Male
+	"elli"   : "en-US-AriaNeural",       // Female
+	"glitch" : "en-US-TonyNeural",       // Robot-ish
+	"callum" : "en-GB-RyanNeural",       // British accent
+	"clyde"  : "en-US-ChristopherNeural" // Funny/deep
 }
 
 app.post("/tts", async (req, res) => {
-	const { text, voiceId, playerId } = req.body;
+	const { text, voiceId } = req.body;
 
 	if (!text || !voiceId) {
 		return res.status(400).json({ error: "Missing text or voiceId" });
@@ -31,39 +29,31 @@ app.post("/tts", async (req, res) => {
 		return res.status(400).json({ error: "Text too long" });
 	}
 
-	// Map voiceId to OpenAI voice name
-	const openaiVoice = VOICE_MAP[voiceId.toLowerCase()] || "alloy";
+	const voice = VOICE_MAP[voiceId.toLowerCase()] || "en-US-GuyNeural";
 
 	try {
-		const response = await fetch("https://api.openai.com/v1/audio/speech", {
-			method: "POST",
-			headers: {
-				"Authorization": `Bearer ${OPENAI_API_KEY}`,
-				"Content-Type": "application/json"
-			},
-			body: JSON.stringify({
-				model: "tts-1",
-				input: text,
-				voice: openaiVoice,
-				response_format: "mp3"
-			})
+		const edgeTTS = require("edge-tts");
+		const synthesizer = new edgeTTS.MsEdgeTTS();
+		await synthesizer.setMetadata(voice, edgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+
+		const chunks = [];
+		const readable = synthesizer.toStream(text);
+
+		await new Promise((resolve, reject) => {
+			readable.on("data", chunk => chunks.push(chunk));
+			readable.on("end", resolve);
+			readable.on("error", reject);
 		});
 
-		if (!response.ok) {
-			const err = await response.text();
-			console.error("OpenAI TTS error:", err);
-			return res.status(500).json({ error: "OpenAI TTS error" });
-		}
-
-		const audioBuffer = await response.buffer();
+		const audioBuffer = Buffer.concat(chunks);
 		const base64Audio = audioBuffer.toString("base64");
 		const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
 
 		return res.json({ audioUrl });
 
 	} catch (err) {
-		console.error("Server error:", err);
-		return res.status(500).json({ error: "Internal server error" });
+		console.error("Edge TTS error:", err);
+		return res.status(500).json({ error: "Edge TTS error" });
 	}
 });
 
