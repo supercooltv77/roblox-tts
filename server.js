@@ -32,12 +32,15 @@ app.post("/tts", async (req, res) => {
 		const tts = new MsEdgeTTS();
 		await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
-		const { audioStream } = tts.toStream(text);
+		// toStream returns a promise in newer versions
+		const result = await tts.toStream(text);
+		const audioStream = result.audioStream || result;
 
 		const chunks = [];
 		await new Promise((resolve, reject) => {
 			audioStream.on("data", chunk => chunks.push(chunk));
 			audioStream.on("close", resolve);
+			audioStream.on("end", resolve);
 			audioStream.on("error", reject);
 		});
 
