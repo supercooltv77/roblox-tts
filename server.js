@@ -2,6 +2,7 @@
 // Uses Microsoft Edge TTS (completely free, no API key needed)
 
 const express = require("express");
+const edgeTTS = require("edge-tts");
 const app = express();
 app.use(express.json());
 
@@ -9,13 +10,13 @@ const PORT = process.env.PORT || 3000;
 
 // Edge TTS voice map
 const VOICE_MAP = {
-	"adam"   : "en-US-GuyNeural",        // Male
-	"bella"  : "en-US-JennyNeural",      // Female
-	"antoni" : "en-US-DavisNeural",      // Male
-	"elli"   : "en-US-AriaNeural",       // Female
-	"glitch" : "en-US-TonyNeural",       // Robot-ish
-	"callum" : "en-GB-RyanNeural",       // British accent
-	"clyde"  : "en-US-ChristopherNeural" // Funny/deep
+	"adam"   : "en-US-GuyNeural",
+	"bella"  : "en-US-JennyNeural",
+	"antoni" : "en-US-DavisNeural",
+	"elli"   : "en-US-AriaNeural",
+	"glitch" : "en-US-TonyNeural",
+	"callum" : "en-GB-RyanNeural",
+	"clyde"  : "en-US-ChristopherNeural"
 }
 
 app.post("/tts", async (req, res) => {
@@ -32,7 +33,6 @@ app.post("/tts", async (req, res) => {
 	const voice = VOICE_MAP[voiceId.toLowerCase()] || "en-US-GuyNeural";
 
 	try {
-		const edgeTTS = require("edge-tts");
 		const synthesizer = new edgeTTS.MsEdgeTTS();
 		await synthesizer.setMetadata(voice, edgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
