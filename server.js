@@ -4,12 +4,11 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 const PORT = process.env.PORT || 3000;
 const AUDIO_DIR = path.join(__dirname, "audio");
 
-// Create audio directory if it doesn't exist
 if (!fs.existsSync(AUDIO_DIR)) {
     fs.mkdirSync(AUDIO_DIR);
 }
@@ -24,7 +23,7 @@ const VOICE_MAP = {
     "clyde"  : "en-US-ChristopherNeural"
 }
 
-// Serve audio files
+// Serve audio files statically
 app.use("/audio", express.static(AUDIO_DIR));
 
 app.post("/tts", async (req, res) => {
@@ -60,17 +59,18 @@ app.post("/tts", async (req, res) => {
         const audioBuffer = Buffer.concat(chunks);
         fs.writeFileSync(filePath, audioBuffer);
 
-        // Delete file after 60 seconds
+        // Clean up file after 60 seconds
         setTimeout(() => {
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }, 60000);
 
+        // Return the public URL — Roblox loads this via HttpService on the server
         const audioUrl = `https://roblox-tts.onrender.com/audio/${fileName}`;
         return res.json({ audioUrl });
 
     } catch (err) {
         console.error("Edge TTS error:", err);
-        return res.status(500).json({ error: "Edge TTS error" });
+        return res.status(500).json({ error: "Edge TTS error: " + err.message });
     }
 });
 
