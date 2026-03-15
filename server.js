@@ -1,48 +1,65 @@
--- ServerScriptService/VoiceTTSHandler.server.lua
--- Receives transcribed text + voice ID from client,
--- calls middleman server, broadcasts audio URL back to all clients
+// server.js — Node.js middleman server
+// Deploy this on Railway.app (free)
+// It receives text + voiceId from Roblox and returns an audio URL from ElevenLabs
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
+const express = require("express");
+const fetch = require("node-fetch");
+const app = express();
+app.use(express.json());
 
--- MIDDLEMAN SERVER URL (same as in your LocalScript)
-local SERVER_URL = "https://YOUR-RAILWAY-URL.up.railway.app"
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY; // set this in Railway environment variables
+const PORT = process.env.PORT || 3000;
 
--- Create RemoteEvents
-local voiceTextEvent = Instance.new("RemoteEvent")
-voiceTextEvent.Name = "VoiceTextEvent"
-voiceTextEvent.Parent = ReplicatedStorage
+app.post("/tts", async (req, res) => {
+    const { text, voiceId, playerId } = req.body;
 
-local voicePlayEvent = Instance.new("RemoteEvent")
-voicePlayEvent.Name = "VoicePlayEvent"
-voicePlayEvent.Parent = ReplicatedStorage
+    // Basic validation
+    if (!text || !voiceId) {
+        return res.status(400).json({ error: "Missing text or voiceId" });
+    }
 
--- Listen for transcribed text from any client
-voiceTextEvent.OnServerEvent:Connect(function(player, text, voiceId)
-	-- Sanitize
-	if typeof(text) ~= "string" or #text > 300 then return end
-	if typeof(voiceId) ~= "string" or #voiceId > 50 then return end
+    if (text.length > 300) {
+        return res.status(400).json({ error: "Text too long" });
+    }
 
-	-- Call middleman server
-	local success, result = pcall(function()
-		local response = HttpService:RequestAsync({
-			Url = SERVER_URL .. "/tts",
-			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
-			Body = HttpService:JSONEncode({
-				text = text,
-				voiceId = voiceId,
-				playerId = player.UserId
-			})
-		})
-		return HttpService:JSONDecode(response.Body)
-	end)
+    try {
+        // Call ElevenLabs API
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: {
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
+            },
+            body: JSON.stringify({
+                text: text,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: {
+                    stability: 0.5,
+                    similarity_boost: 0.75
+                }
+            })
+        });
 
-	if success and result and result.audioUrl then
-		-- Broadcast audio URL + which player spoke to ALL clients
-		voicePlayEvent:FireAllClients(player.UserId, result.audioUrl, player.Name)
-	else
-		warn("TTS server error for player:", player.Name, result)
-	end
-end)
+        if (!response.ok) {
+            const err = await response.text();
+            console.error("ElevenLabs error:", err);
+            return res.status(500).json({ error: "ElevenLabs API error" });
+        }
+
+        // Convert audio to base64 so Roblox can load it as a data URI
+        const audioBuffer = await response.buffer();
+        const base64Audio = audioBuffer.toString("base64");
+        const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+
+        return res.json({ audioUrl });
+
+    } catch (err) {
+        console.error("Server error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.get("/", (req, res) => res.send("TTS server running!"));
+
+app.listen(PORT, () => console.log(`TTS server listening on port ${PORT}`));
