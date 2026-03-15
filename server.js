@@ -1,6 +1,3 @@
-// server.js — Node.js middleman server
-// Uses Microsoft Edge TTS (completely free, no API key needed)
-
 const express = require("express");
 const { MsEdgeTTS, OUTPUT_FORMAT } = require("msedge-tts");
 const app = express();
@@ -35,13 +32,13 @@ app.post("/tts", async (req, res) => {
 		const tts = new MsEdgeTTS();
 		await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
-		const chunks = [];
-		const readable = tts.toStream(text);
+		const { audioStream } = tts.toStream(text);
 
+		const chunks = [];
 		await new Promise((resolve, reject) => {
-			readable.on("data", chunk => chunks.push(chunk));
-			readable.on("end", resolve);
-			readable.on("error", reject);
+			audioStream.on("data", chunk => chunks.push(chunk));
+			audioStream.on("close", resolve);
+			audioStream.on("error", reject);
 		});
 
 		const audioBuffer = Buffer.concat(chunks);
